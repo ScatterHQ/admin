@@ -3,6 +3,10 @@ setup(
     name="Flocker Admin Tools",
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
+    install_requires=[
+        'treq',
+        'twisted',
+    ],
     entry_points={
         'console_scripts': [
             'jira-backup = admin.jira.backup:main',
