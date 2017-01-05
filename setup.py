@@ -5,6 +5,7 @@ setup(
     package_dir={'': 'src'},
     install_requires=[
         'attr',
+        'click',
         'eliot',
         'treq',
         'twisted',

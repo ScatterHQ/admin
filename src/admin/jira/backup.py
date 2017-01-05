@@ -2,6 +2,7 @@ import json
 import sys
 
 import attr
+import click
 from eliot import start_action, to_file
 import treq
 from twisted.internet.task import react
@@ -26,16 +27,17 @@ class HTTPError(Exception):
 
 
 @inlineCallbacks
-def some_issues(start_at, max_results):
+def some_issues(start_at, max_results, jql):
     with start_action(
             action_type=u"admin:jira:backup:some_issues",
             start_at=start_at,
+            jql=jql,
             max_results=max_results
     ):
         params = dict(
-            startAtX=start_at,
+            startAt=start_at,
             maxResults=max_results,
-            jql="project=FLOC",
+            jql=jql,
         )
         response = yield treq.post(
             URL,
@@ -52,13 +54,13 @@ def some_issues(start_at, max_results):
 
 
 @inlineCallbacks
-def all_issues():
+def all_issues(jql):
     issues = []
     start_at = 0
     max_results = 50
     total = None
     while True:
-        content = yield some_issues(start_at, max_results)
+        content = yield some_issues(start_at, max_results, jql)
         new_total = content["total"]
         if total is None:
             total = new_total
@@ -75,11 +77,33 @@ def all_issues():
 
 
 @inlineCallbacks
-def backup(reactor):
-    issues = yield all_issues()
-    sys.stdout.write(json.dumps(issues))
+def backup(reactor, output, jql):
+    issues = yield all_issues(jql)
+    output.write(json.dumps(issues))
     returnValue(0)
 
 
-def main():
-    raise SystemExit(react(backup))
+@click.command()
+@click.option(
+    "--output",
+    type=click.File("wb"),
+    default="-",
+    help=(
+        "JSON output will be written to this file path "
+        "(`stdout` by default). "
+    )
+)
+@click.option(
+    "--jql",
+    default="",
+    help=(
+        "A JQL query to filter issues. "
+        "E.g. 'project=FLOC'. "
+        "If empty (default) *all* issues are downloaded."
+    )
+)
+def main(output, jql):
+    """
+    Export JIRA issues in JSON format to stdout.
+    """
+    raise SystemExit(react(backup, (output, jql)))
