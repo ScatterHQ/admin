@@ -1,30 +1,52 @@
 import json
 import sys
 
+import attr
+from eliot import start_action, to_file
 import treq
 from twisted.internet.task import react
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 URL = u"https://clusterhq.atlassian.net/rest/api/2/search"
 
+
+to_file(sys.stderr)
+
+
+@attr.s(frozen=True)
+class HTTPError(Exception):
+    """
+    A HTTP response had an error code.
+    """
+    code = attr.ib()
+    content = attr.ib()
+
+    def __unicode__(self):
+        return repr(self)
+
+
 @inlineCallbacks
 def some_issues(start_at, max_results):
-    sys.stderr.write(b"start_at: %i\n" % (start_at,))
-    params = dict(
-        startAt=start_at,
-        maxResults=max_results,
-        jql="project=FLOC",
-    )
-    response = yield treq.post(
-        URL,
-        json.dumps(params),
-        headers={'Content-Type': ['application/json']},
-    )
-    if response.code != 200:
-        content = yield response.content()
-        raise Exception("HTTP error", response.code, content)
-    else:
-        content = yield response.json()
+    with start_action(
+            action_type=u"admin:jira:backup:some_issues",
+            start_at=start_at,
+            max_results=max_results
+    ):
+        params = dict(
+            startAtX=start_at,
+            maxResults=max_results,
+            jql="project=FLOC",
+        )
+        response = yield treq.post(
+            URL,
+            json.dumps(params),
+            headers={'Content-Type': ['application/json']},
+        )
+        if response.code != 200:
+            content = yield response.content()
+            raise HTTPError(response.code, content)
+        else:
+            content = yield response.json()
 
     returnValue(content)
 
@@ -39,7 +61,6 @@ def all_issues():
         content = yield some_issues(start_at, max_results)
         new_total = content["total"]
         if total is None:
-            sys.stderr.write(b"Total: %i\n" % (new_total,))
             total = new_total
         else:
             if total != new_total:
@@ -57,11 +78,6 @@ def all_issues():
 def backup(reactor):
     issues = yield all_issues()
     sys.stdout.write(json.dumps(issues))
-    sys.stderr.write(
-        b"Issue Count: %i\n" % (
-            len(issues),
-        )
-    )
     returnValue(0)
 
 
